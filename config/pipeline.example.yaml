@@ -1,0 +1,48 @@
+# =====================================================================
+# Crawl4AI -> Amazon Bedrock Knowledge Base pipeline configuration
+# ---------------------------------------------------------------------
+# Copy this file to config/pipeline.yaml and replace every <PLACEHOLDER>.
+# No customer-specific value is hardcoded in source; everything the
+# pipeline needs comes from this file (or CRAWL4AI_KB_* env overrides).
+# =====================================================================
+
+# ---- Required: Amazon Bedrock Knowledge Base target ----
+# The knowledge base and its S3 data source must already exist.
+knowledge_base_id: "<REPLACE_WITH_KNOWLEDGE_BASE_ID>"   # e.g. ABCDEFGHIJ
+data_source_id: "<REPLACE_WITH_S3_DATA_SOURCE_ID>"      # e.g. KLMNOPQRST
+
+# ---- Required: Amazon S3 data source location ----
+s3_bucket: "<REPLACE_WITH_BUCKET_NAME>"                 # bucket wired to the KB S3 data source
+region: "<REPLACE_WITH_AWS_REGION>"                     # e.g. us-east-1
+
+# ---- Optional: key prefix under which prepared files are uploaded ----
+s3_prefix: "web-content/"
+
+# ---- Required: starting URLs for deep traversal ----
+seed_urls:
+  - "https://www.example.com/services"
+  - "https://www.example.com/faq"
+  - "https://www.example.com/contact"
+
+# ---- Optional: static metadata applied to every prepared document ----
+# These become filterable attributes at retrieval time. Values may be strings,
+# finite numbers, booleans, or lists of strings.
+metadata_attributes:
+  department: "public-information"
+  content_category: "web"
+
+# ---- Optional: Crawl4AI extraction and deep-traversal settings ----
+# Defaults are deliberately conservative. For sites with thousands of relevant
+# pages, raise max_pages only after testing scope and include/exclude filters.
+crawl:
+  max_depth: 2                   # link levels followed from each seed (0 = seed only)
+  max_pages: 1000               # GLOBAL cap across all seeds for one pipeline run
+  scope: "path"                 # page = seed only; path = seed subtree; host = exact host
+  include_patterns: []          # optional Crawl4AI URL globs/regexes for discovered URLs
+  exclude_patterns: []          # optional Crawl4AI URL globs/regexes to reject
+  css_selector: null            # optional CSS selector, e.g. "main, article"
+  request_delay_seconds: 1.0    # mean delay for discovered page requests; one at a time
+  delay_before_return_html: 2.0 # seconds to let client-side JS render
+  check_robots_txt: true        # skip URLs disallowed by robots.txt (recommended)
+  page_timeout_ms: 60000        # per-page navigation timeout
+  word_count_threshold: 50      # drop pages/blocks below this many words

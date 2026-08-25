@@ -1,0 +1,4 @@
+# Runtime dependencies tested with this sample.
+crawl4ai==0.9.2
+boto3==1.43.55
+PyYAML==6.0.3

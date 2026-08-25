@@ -1,0 +1,39 @@
+{
+  "app": "python app.py",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "**/__pycache__", "cdk.out"]
+  },
+  "context": {
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:validateSnapshotRemovalPolicy": true,
+
+    "//": "===== Customer configuration — replace the placeholders below or pass with -c =====",
+    "knowledgeBaseId": "<REPLACE_WITH_KNOWLEDGE_BASE_ID>",
+    "dataSourceId": "<REPLACE_WITH_S3_DATA_SOURCE_ID>",
+    "s3Bucket": "<REPLACE_WITH_BUCKET_NAME>",
+    "s3Prefix": "web-content/",
+    "seedUrls": [
+      "https://www.example.com/services",
+      "https://www.example.com/faq"
+    ],
+    "scheduleExpression": "rate(24 hours)",
+    "taskCpu": 2048,
+    "taskMemory": 4096,
+    "cpuArchitecture": "ARM64",
+    "egressMode": "public",
+    "privateEndpoints": false,
+    "metadataAttributes": {
+      "content_category": "web"
+    },
+    "cssSelector": null,
+    "crawlRequestDelaySeconds": 1.0,
+    "maxDepth": 2,
+    "maxPages": 1000,
+    "crawlScope": "path",
+    "includePatterns": [],
+    "excludePatterns": []
+  }
+}

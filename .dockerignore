@@ -1,0 +1,11 @@
+.venv/
+**/__pycache__/
+*.pyc
+.git/
+.gitignore
+deploy/
+prepared_content/
+config/pipeline.yaml
+*.md
+.ruff_cache/
+.pytest_cache/
