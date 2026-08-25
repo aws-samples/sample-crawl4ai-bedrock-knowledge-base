@@ -1,0 +1,29 @@
+[build-system]
+# Pin the build backend to a tested version so isolated PEP 517 builds are
+# reproducible and cannot resolve an untested or compromised setuptools. Matches
+# the "==" pinning in the requirements files; bump when a newer one is validated.
+requires = ["setuptools==84.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crawl4ai-bedrock-kb"
+version = "1.0.0"
+description = "Prepare web content with Crawl4AI and ingest it into an Amazon Bedrock Knowledge Base."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT-0" }
+dependencies = [
+    "crawl4ai==0.9.2",
+    "boto3==1.43.55",
+    "PyYAML==6.0.3",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N"]

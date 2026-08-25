@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "UploadPreparedContentToDataSourceBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::<REPLACE_WITH_BUCKET_NAME>/<REPLACE_WITH_PREFIX>*"
+    },
+    {
+      "Sid": "TriggerAndMonitorKnowledgeBaseIngestion",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:StartIngestionJob",
+        "bedrock:GetIngestionJob"
+      ],
+      "Resource": "arn:aws:bedrock:<REPLACE_WITH_REGION>:<REPLACE_WITH_ACCOUNT_ID>:knowledge-base/<REPLACE_WITH_KNOWLEDGE_BASE_ID>"
+    }
+  ]
+}

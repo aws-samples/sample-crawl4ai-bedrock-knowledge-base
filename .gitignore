@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local pipeline config and output (never commit customer values)
+config/pipeline.yaml
+prepared_content/
+
+# CDK
+cdk.out/
+deploy/cdk.out/
+deploy/cdk.context.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Microsoft Office lock/owner files (can leak an author's name)
+~$*
+
+# Security scanner working directories (may contain local findings/artifacts)
+.holmes/
+.ash/
