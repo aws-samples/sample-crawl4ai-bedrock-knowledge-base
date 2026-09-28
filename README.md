@@ -237,6 +237,10 @@ not delete the knowledge base, source bucket, ingested objects, or CDK bootstrap
 | Ingestion job `FAILED` | Check the sidecar names (`*.md.metadata.json`) and that files are under the configured prefix. |
 | `AccessDenied` on ingest | Attach `iam/pipeline-policy.json` (with placeholders replaced) to the running principal. |
 
+## Acknowledgments
+
+This product includes software developed by UncleCode (https://x.com/unclecode) as part of the Crawl4AI project (https://github.com/unclecode/crawl4ai).
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
