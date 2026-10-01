@@ -25,21 +25,26 @@ indexing, metadata filtering, and retrieval. This pipeline only prepares input.
 
 ## When to use this sample
 
-For public static websites, start with the fully managed [Amazon Bedrock Web Crawler data source
-connector](https://docs.aws.amazon.com/bedrock/latest/userguide/webcrawl-data-source-connector.html)
+For most public websites, start with the [Amazon Bedrock Web Crawler data source
+connector](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-managed-ds-webcrawler.html) in an
+[Amazon Bedrock Managed Knowledge Base](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-build-managed.html)
 (referred to here as the **Bedrock Web Crawler**). It requires no crawler infrastructure and
-provides managed synchronization, crawl scope and inclusion/exclusion filters, rate limiting,
-robots.txt compliance, and incremental sync.
+provides seed URL and sitemap crawling, crawl scope and URL filters, rate limiting, robots.txt
+compliance, sign-in options, and incremental sync.
 
-Use this content-preparation sample when a website requires client-side JavaScript rendering,
-a CSS selector for targeted extraction, or custom metadata before Amazon Bedrock Knowledge Bases
-ingests it through Amazon S3. Each `seed_urls` entry starts a breadth-first traversal. Depth, a
+Use this content-preparation sample when you need more control over what reaches the knowledge
+base: a CSS selector for targeted extraction, boilerplate removal, or custom metadata on each
+document before Amazon Bedrock Knowledge Bases ingests it through Amazon S3. Each `seed_urls` entry starts a breadth-first traversal. Depth, a
 global per-run page cap, same-origin page/path/host scope, and include/exclude patterns keep discovery
 bounded while allowing large sites to contribute thousands of relevant pages. The sample does not
-implement authenticated sessions. For supported protected static sites, evaluate the managed
+implement authenticated sessions. For sites that require sign-in, evaluate the managed
 [Bedrock Web Crawler authentication options](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-managed-ds-webcrawler.html)
-first. If you extend this sample with authentication, store credentials in AWS Secrets Manager and
-perform a separate security review.
+first, which include basic, form-based, and SAML authentication. If you extend this sample with
+authentication, store credentials in AWS Secrets Manager and perform a separate security review.
+
+The sample works with a managed knowledge base or a customer-managed knowledge base, as long as the
+knowledge base uses an Amazon S3 data source. Both types use the same ingestion calls
+(`StartIngestionJob` and `GetIngestionJob`) and accept the same sidecar format.
 
 ## Architecture
 
@@ -56,10 +61,13 @@ The numbered steps in the diagram map to the following workflow:
 3. The task uploads the prepared files to the Amazon S3 bucket that backs the knowledge base data
    source.
 4. The task starts an Amazon Bedrock Knowledge Bases ingestion job.
-5. Amazon Bedrock Knowledge Bases reads the new objects and applies your configured chunking strategy.
-6. It creates embeddings and indexes them in your configured vector store.
-7. Your generative AI application calls `Retrieve` or `RetrieveAndGenerate` and receives a grounded
-   response with citations.
+5. Amazon Bedrock Knowledge Bases reads the new and changed objects, parses them, and applies your
+   configured chunking strategy.
+6. It creates embeddings and indexes them in the knowledge base's vector store, which Amazon Bedrock
+   manages for a managed knowledge base.
+7. Your generative AI application calls `Retrieve` to get relevant chunks. To get a generated
+   response with citations, it calls `AgenticRetrieveStream` for a managed knowledge base or
+   `RetrieveAndGenerate` for a customer-managed knowledge base.
 
 The task reads its non-secret pipeline configuration from AWS Systems Manager Parameter Store at
 startup. The diagram shows the scheduled deployment in [`deploy/`](deploy/). The Quick Start below runs
@@ -73,9 +81,25 @@ the same steps 2 through 4 from your own machine, without EventBridge, Fargate, 
 
 ## Prerequisites
 
-- An AWS account with Amazon Bedrock enabled in your Region.
-- An existing Amazon Bedrock Knowledge Base with an **Amazon S3 data source** already configured.
-  See [Create a knowledge base](https://docs.aws.amazon.com/bedrock/latest/userguide/knowledge-base-create.html).
+- One of the following Amazon Bedrock knowledge bases:
+  - **A managed knowledge base** (recommended) in a Region where
+    [managed knowledge bases are available](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-managed-regions.html).
+    See [Create a managed knowledge base](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-managed-create.html)
+    and the [Amazon S3 connector](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-managed-ds-s3.html).
+    On the data source, leave **Metadata files prefix** empty, because the pipeline writes each
+    metadata sidecar alongside its document.
+  - **An existing customer-managed knowledge base.** To add an Amazon S3 data source, see
+    [Connect to Amazon S3 for your knowledge base](https://docs.aws.amazon.com/bedrock/latest/userguide/s3-data-source-connector.html).
+    The pipeline writes a metadata sidecar for every document, so confirm that your vector store
+    can store and filter those attributes, as described in
+    [Metadata and filtering](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html).
+    For example, an Amazon OpenSearch Serverless vector index must use the `faiss` engine. An
+    Amazon Aurora vector index needs a custom metadata column or a column for each metadata
+    attribute.
+- An Amazon S3 data source in that knowledge base whose status is `AVAILABLE`. It can be a new
+  data source or one you already use. It must use the bucket set in `s3_bucket`. If the data
+  source filters content by prefix or file pattern, the filters must allow the files that the
+  pipeline writes under `s3_prefix` (default `web-content/`).
 - Python 3.10 or later.
 - AWS credentials configured (for example via `aws configure`) with the permissions in
   [`iam/pipeline-policy.json`](iam/pipeline-policy.json).
@@ -188,13 +212,20 @@ are configured in the YAML file.
 ## How metadata reaches retrieval
 
 Each Markdown file `page.md` gets a sidecar named `page.md.metadata.json` (the full source
-filename with `.metadata.json` appended — the naming Amazon Bedrock requires). The sidecar holds
-`source_url`, `title`, ISO and epoch crawl timestamps, `content_type`, plus supported custom
-attributes. After ingestion, these values can be used in `Retrieve` / `RetrieveAndGenerate`
-filters when supported by the configured vector store and index. For an Amazon S3 data source,
-Bedrock citations identify the S3 object; your application can read `source_url` from returned
-metadata and render it as the user-facing source link. Metadata filters improve retrieval precision
-but are not an authorization boundary.
+filename with `.metadata.json` appended — the naming Amazon Bedrock requires), stored next to the
+document. The sidecar holds `source_url`, `title`, ISO and epoch crawl timestamps, `content_type`,
+plus supported custom attributes. Each value uses the typed attribute format, for example
+`{"value": {"type": "STRING", "stringValue": "web"}}`, which both managed and customer-managed
+knowledge bases accept for Amazon S3 data sources.
+
+After ingestion, you can filter retrieval results on these attributes. For a managed knowledge base,
+put the filter in `managedSearchConfiguration`, use `equals`, `greaterThan`, `lessThan`, `in`, or
+`notIn` (`startsWith` and `stringContains` aren't supported), and pass number values as integers,
+because decimal values are rejected. For a customer-managed knowledge base, put it in
+`vectorSearchConfiguration`; supported operators depend on the vector store. Retrieved results,
+including those cited in generated responses, carry `source_url` in their metadata; your
+application can render it as the user-facing source link. Metadata filters improve retrieval
+precision but are not an authorization boundary.
 
 ## Security
 
@@ -204,9 +235,9 @@ but are not an authorization boundary.
 - `config/pipeline.yaml`, `prepared_content/`, and `deploy/cdk.context.json` are git-ignored.
   Verify they are untracked before publishing or sharing a checkout.
 - Enable `crawl.check_robots_txt: true` and confirm you are authorized to crawl each target site.
-- Amazon S3 encrypts new objects with SSE-S3 by default. If the bucket uses a customer-managed
-  AWS KMS key, also authorize the uploader in the KMS key policy and grant the required KMS data-key
-  permissions.
+- Amazon S3 encrypts new objects with SSE-S3 by default. If the bucket uses an AWS KMS customer
+  managed key, grant the uploader and the knowledge base service role the required AWS KMS
+  permissions in both IAM and the key policy.
 - Do not place credentials, cookies, or other secrets in CDK context or the plaintext SSM pipeline
   configuration. See [SECURITY.md](SECURITY.md) for shared-responsibility guidance.
 
@@ -226,7 +257,8 @@ The local quick-start path creates no standalone AWS infrastructure. To remove i
 - Delete the knowledge base / data source if it was created only for this walkthrough.
 
 If you deployed the optional CDK stack, also run `cd deploy` followed by `cdk destroy`. This does
-not delete the knowledge base, source bucket, ingested objects, or CDK bootstrap assets.
+not delete the knowledge base, source bucket, ingested objects, CDK bootstrap assets, or the
+cluster's Container Insights log group.
 
 ## Troubleshooting
 
