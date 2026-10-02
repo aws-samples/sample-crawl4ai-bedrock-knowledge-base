@@ -121,6 +121,26 @@ def _base_name(url: str) -> str:
     return f"{slug[:80].rstrip(' .')}_{url_hash}"
 
 
+def _typed_attributes(metadata: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Wrap each value in the typed attribute format used by S3 metadata sidecars.
+
+    Managed and customer-managed knowledge bases both accept this format for Amazon S3
+    data sources, so the same sidecar works with either knowledge base type.
+    """
+    typed: dict[str, dict[str, object]] = {}
+    for key, value in metadata.items():
+        if isinstance(value, bool):
+            attribute: dict[str, object] = {"type": "BOOLEAN", "booleanValue": value}
+        elif isinstance(value, (int, float)):
+            attribute = {"type": "NUMBER", "numberValue": value}
+        elif isinstance(value, list):
+            attribute = {"type": "STRING_LIST", "stringListValue": value}
+        else:
+            attribute = {"type": "STRING", "stringValue": str(value)}
+        typed[key] = {"value": attribute}
+    return typed
+
+
 def _write_document(
     output_dir: str,
     base_name: str,
@@ -132,7 +152,10 @@ def _write_document(
     md_path = os.path.join(output_dir, md_name)
     meta_path = os.path.join(output_dir, f"{md_name}{_METADATA_SUFFIX}")
     sidecar = json.dumps(
-        {"metadataAttributes": metadata}, indent=2, ensure_ascii=False, allow_nan=False
+        {"metadataAttributes": _typed_attributes(metadata)},
+        indent=2,
+        ensure_ascii=False,
+        allow_nan=False,
     )
     sidecar_size = len(sidecar.encode("utf-8"))
     if sidecar_size > _MAX_SIDECAR_BYTES:

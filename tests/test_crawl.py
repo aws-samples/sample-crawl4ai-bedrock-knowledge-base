@@ -29,6 +29,30 @@ class SidecarTests(unittest.TestCase):
         base_name = _base_name("https://example.com/a%3Ab%2Ac%3Fd")
         self.assertNotRegex(base_name, r'[<>:"/\\|?*]')
 
+    def test_sidecar_uses_typed_attribute_values(self):
+        metadata = {
+            "title": "Page",
+            "rank": 3,
+            "score": 1.5,
+            "public": True,
+            "tags": ["a", "b"],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, metadata_path = _write_document(temp_dir, "page", "content", metadata)
+            with open(metadata_path, encoding="utf-8") as handle:
+                attributes = json.load(handle)["metadataAttributes"]
+
+        self.assertEqual(attributes["title"], {"value": {"type": "STRING", "stringValue": "Page"}})
+        self.assertEqual(attributes["rank"], {"value": {"type": "NUMBER", "numberValue": 3}})
+        self.assertEqual(attributes["score"], {"value": {"type": "NUMBER", "numberValue": 1.5}})
+        self.assertEqual(
+            attributes["public"], {"value": {"type": "BOOLEAN", "booleanValue": True}}
+        )
+        self.assertEqual(
+            attributes["tags"],
+            {"value": {"type": "STRING_LIST", "stringListValue": ["a", "b"]}},
+        )
+
     def test_sidecar_larger_than_ten_kib_is_rejected_before_write(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaisesRegex(ValueError, "maximum is 10240"):
@@ -136,7 +160,8 @@ class DeepCrawlTests(unittest.IsolatedAsyncioTestCase):
             source_urls = []
             for path in sidecars:
                 with open(path, encoding="utf-8") as handle:
-                    source_urls.append(json.load(handle)["metadataAttributes"]["source_url"])
+                    attributes = json.load(handle)["metadataAttributes"]
+                    source_urls.append(attributes["source_url"]["value"]["stringValue"])
 
         self.assertEqual(
             source_urls,
@@ -193,7 +218,8 @@ class DeepCrawlTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(written), 2)
             metadata_path = next(path for path in written if path.endswith(".metadata.json"))
             with open(metadata_path, encoding="utf-8") as handle:
-                source_url = json.load(handle)["metadataAttributes"]["source_url"]
+                attributes = json.load(handle)["metadataAttributes"]
+                source_url = attributes["source_url"]["value"]["stringValue"]
 
         self.assertEqual(source_url, "https://example.com/docs/final")
 

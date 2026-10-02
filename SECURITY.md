@@ -15,7 +15,7 @@ You are responsible for:
 - Confirming that you are authorized to crawl each configured website.
 - Reviewing crawled content before ingestion and preventing sensitive data from entering the knowledge base.
 - Restricting IAM access to the configured Amazon S3 prefix, SSM parameter, and knowledge base.
-- Securing network egress, logs, Amazon S3 encryption, and any customer-managed AWS KMS keys.
+- Securing network egress, logs, Amazon S3 encryption, and any AWS KMS customer managed keys.
 - Treating metadata filters as retrieval controls, not as an authorization boundary.
 - Keeping credentials, session cookies, and other secrets out of CDK context, the plaintext SSM configuration parameter, source files, and container images.
 
