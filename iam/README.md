@@ -59,3 +59,9 @@ object ARN are required, because the two cover bucket-level and object-level req
   application's role.
 - This policy grants no `bedrock:InvokeModel`; embedding and generation are performed by the
   knowledge base service role, not by the pipeline.
+- This policy grants no AWS KMS actions. If the bucket uses SSE-KMS with a customer managed key,
+  also allow `kms:GenerateDataKey` on that key in both the principal's IAM policy and the key
+  policy. Multipart uploads also need `kms:Decrypt`; boto3 uses multipart upload for files of
+  8 MB or larger by default. The Fargate task role that the CDK stack creates has no AWS KMS
+  permissions either. See
+  [Using server-side encryption with AWS KMS keys (SSE-KMS)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingKMSEncryption.html).

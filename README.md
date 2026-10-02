@@ -95,7 +95,9 @@ the same steps 2 through 4 from your own machine, without EventBridge, Fargate, 
     [Metadata and filtering](https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html).
     For example, an Amazon OpenSearch Serverless vector index must use the `faiss` engine. An
     Amazon Aurora vector index needs a custom metadata column or a column for each metadata
-    attribute.
+    attribute. With Amazon S3 Vectors, you can
+    [attach up to 1 KB of custom metadata](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html)
+    to each vector, so keep any attributes that you add short.
 - An Amazon S3 data source in that knowledge base whose status is `AVAILABLE`. It can be a new
   data source or one you already use. It must use the bucket set in `s3_bucket`. If the data
   source filters content by prefix or file pattern, the filters must allow the files that the
@@ -267,6 +269,7 @@ cluster's Container Insights log group.
 | `Configuration error: ... is required` | A required key is missing or still a placeholder in `pipeline.yaml`. |
 | Crawl produces 0 files | Pages need more render time (`delay_before_return_html`) or are blocked by `robots.txt`. |
 | Ingestion job `FAILED` | Check the sidecar names (`*.md.metadata.json`) and that files are under the configured prefix. |
+| Ingestion job `COMPLETE`, but some pages are missing from results | A job can complete even when some documents fail to ingest. Check the job statistics and failure reasons that the pipeline logs. With Amazon S3 Vectors, also confirm that each sidecar is under 1 KB. |
 | `AccessDenied` on ingest | Attach `iam/pipeline-policy.json` (with placeholders replaced) to the running principal. |
 
 ## Acknowledgments
