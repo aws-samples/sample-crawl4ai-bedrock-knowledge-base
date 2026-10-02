@@ -151,9 +151,11 @@ def _write_document(
     md_name = f"{base_name}.md"
     md_path = os.path.join(output_dir, md_name)
     meta_path = os.path.join(output_dir, f"{md_name}{_METADATA_SUFFIX}")
+    # Write compact JSON to keep sidecars small. With Amazon S3 Vectors, a knowledge base
+    # accepts up to 1 KB of custom metadata for each vector.
     sidecar = json.dumps(
         {"metadataAttributes": _typed_attributes(metadata)},
-        indent=2,
+        separators=(",", ":"),
         ensure_ascii=False,
         allow_nan=False,
     )
