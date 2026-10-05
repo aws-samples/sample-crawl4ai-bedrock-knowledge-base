@@ -120,6 +120,10 @@ The stack strictly validates required identifiers, seed URLs, architecture, egre
 - **Task failures.** The container exit code and the `crawler` CloudWatch log stream report each run.
   To be notified without checking manually, alarm on ECS task state change events for this cluster in
   Amazon EventBridge, or on a metric filter over the log group.
+- **Partial ingestion.** An ingestion job can report `COMPLETE` even when some documents fail to
+  ingest, and the task then exits with code 0. The job statistics don't always count these
+  documents, but the task logs the job's failure reasons at the ERROR level. To be notified, add a
+  metric filter for the text `failure reasons`.
 - **GuardDuty Runtime Monitoring.** If GuardDuty manages its security agent for Fargate in your
   account, it adds a sidecar container to each task. The execution role that CDK generates pulls
   images only from the CDK bootstrap repository, so the sidecar fails with
@@ -161,7 +165,7 @@ A newly created VPC counts against the regional VPC quota. If the account has re
 
 The task runs on the configured schedule. To run it immediately, use the Amazon ECS console and select the generated cluster, task definition, subnets, and crawler security group. You can also copy the EventBridge target network configuration into `aws ecs run-task`.
 
-Monitor both the `crawler` container exit code and its CloudWatch log stream. A successful task reports `job_status: COMPLETE`. `FAILED`, `STOPPED`, and `TIMED_OUT` return a nonzero container exit code.
+Monitor both the `crawler` container exit code and its CloudWatch log stream. A successful task reports `job_status: COMPLETE`. `FAILED`, `STOPPED`, and `TIMED_OUT` return a nonzero container exit code. A `COMPLETE` job can still include documents that failed to ingest, so also check the logged job statistics and failure reasons.
 
 ## Repeated runs
 

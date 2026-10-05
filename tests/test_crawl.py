@@ -53,6 +53,29 @@ class SidecarTests(unittest.TestCase):
             {"value": {"type": "STRING_LIST", "stringListValue": ["a", "b"]}},
         )
 
+    def test_sidecar_fits_s3_vectors_metadata_limit(self):
+        # With Amazon S3 Vectors, a knowledge base accepts up to 1 KB of custom metadata
+        # for each vector. This page uses the attributes from pipeline.example.yaml.
+        metadata = {
+            "source_url": (
+                "https://www.example.gov/services/permits-and-licenses/building-permits/"
+                "apply-for-a-residential-building-permit"
+            ),
+            "title": (
+                "Apply for a Residential Building Permit | Permits and Licenses | "
+                "City of Example"
+            ),
+            "crawled_at": "2026-10-02T21:44:44.748943+00:00",
+            "crawled_at_epoch": 1790977484.748943,
+            "content_type": "web_page",
+            "department": "public-information",
+            "content_category": "web",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _, metadata_path = _write_document(temp_dir, "page", "content", metadata)
+            sidecar_size = os.path.getsize(metadata_path)
+        self.assertLess(sidecar_size, 1024)
+
     def test_sidecar_larger_than_ten_kib_is_rejected_before_write(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             with self.assertRaisesRegex(ValueError, "maximum is 10240"):
