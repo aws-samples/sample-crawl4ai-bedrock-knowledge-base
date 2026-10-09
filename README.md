@@ -7,8 +7,7 @@
 > compliance with organizational requirements. See the
 > [AWS Shared Responsibility Model](https://aws.amazon.com/compliance/shared-responsibility-model/).
 
-This repository is the companion code for the AWS blog post *"Prepare web content for Amazon Bedrock
-Knowledge Bases with Crawl4AI."* It contains a small, config-driven Python pipeline that:
+This repository contains a small, config-driven Python pipeline that:
 
 1. **Prepares** each configured URL with [Crawl4AI](https://github.com/unclecode/crawl4ai)
    (headless browser and JavaScript rendering), preferring fit Markdown produced by a pruning
