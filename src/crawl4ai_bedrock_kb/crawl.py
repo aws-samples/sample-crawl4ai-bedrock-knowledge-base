@@ -196,9 +196,11 @@ async def crawl_and_prepare(config: PipelineConfig, output_dir: str) -> list[str
     """Deep-crawl each seed while enforcing one global per-run page cap."""
     os.makedirs(output_dir, exist_ok=True)
     browser_config = BrowserConfig(headless=True, java_script_enabled=True)
+    # Don't set excluded_tags: Crawl4AI removes those elements before it collects links,
+    # so the deep crawl would miss links in site navigation. PruningContentFilter already
+    # drops nav, header, footer, and aside elements from the fit Markdown.
     common_run_settings = {
         "markdown_generator": DefaultMarkdownGenerator(content_filter=PruningContentFilter()),
-        "excluded_tags": ["nav", "header", "footer", "aside"],
         "css_selector": config.crawl.css_selector,
         "delay_before_return_html": config.crawl.delay_before_return_html,
         "check_robots_txt": config.crawl.check_robots_txt,
@@ -274,7 +276,7 @@ async def crawl_and_prepare(config: PipelineConfig, output_dir: str) -> list[str
                     "source_url": source_url,
                     "title": page_meta.get("title") or urlparse(source_url).path or source_url,
                     "crawled_at": crawled_at.isoformat(),
-                    "crawled_at_epoch": crawled_at.timestamp(),
+                    "crawled_at_epoch": int(crawled_at.timestamp()),
                     "content_type": "web_page",
                     **config.metadata_attributes,
                 }

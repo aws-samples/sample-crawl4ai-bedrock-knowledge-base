@@ -6,7 +6,7 @@ import json
 import os
 from typing import Any
 
-from aws_cdk import RemovalPolicy, Stack
+from aws_cdk import CfnOutput, RemovalPolicy, Stack
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr_assets as ecr_assets
 from aws_cdk import aws_ecs as ecs
@@ -215,6 +215,32 @@ class CrawlerStack(Stack):
                     ),
                 )
             ],
+        )
+
+        # Ready-to-run commands to follow a run's logs and to start a run outside the
+        # schedule, without looking up the cluster, task definition, or network settings.
+        network_configuration = (
+            "awsvpcConfiguration={"
+            f"subnets=[{','.join(selected_subnets)}],"
+            f"securityGroups=[{task_security_group.security_group_id}],"
+            f"assignPublicIp={'ENABLED' if assign_public_ip else 'DISABLED'}"
+            "}"
+        )
+        CfnOutput(
+            self,
+            "RunTaskCommand",
+            description="Starts one crawler task now, outside the schedule.",
+            value=(
+                f"aws ecs run-task --region {self.region} --cluster {cluster.cluster_name} "
+                f"--task-definition {task_definition.task_definition_arn} --launch-type FARGATE "
+                f'--network-configuration "{network_configuration}"'
+            ),
+        )
+        CfnOutput(
+            self,
+            "TailLogsCommand",
+            description="Follows the crawler task's CloudWatch logs.",
+            value=f"aws logs tail {log_group.log_group_name} --follow --region {self.region}",
         )
 
     def _resolve_vpc(
