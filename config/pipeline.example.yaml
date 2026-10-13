@@ -34,6 +34,8 @@ metadata_attributes:
 # ---- Optional: Crawl4AI extraction and deep-traversal settings ----
 # Defaults are deliberately conservative. For sites with thousands of relevant
 # pages, raise max_pages only after testing scope and include/exclude filters.
+# With scope "path", use a directory URL such as https://www.example.com/services as
+# the seed. A page URL such as .../services/permits.html limits the crawl to that page.
 crawl:
   max_depth: 2                   # link levels followed from each seed (0 = seed only)
   max_pages: 1000               # GLOBAL cap across all seeds for one pipeline run

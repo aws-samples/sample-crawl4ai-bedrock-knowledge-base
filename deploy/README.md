@@ -34,6 +34,7 @@ AWS Lambda container images can include headless Chromium, but Lambda has a 15-m
 - A Docker-compatible container engine that is **running**, because CDK builds the crawler image
   locally. Verify with `docker info`.
 - AWS credentials for the target account and Region.
+- The AWS CLI version 2, to run the commands in the stack outputs.
 - A bootstrapped CDK environment.
 - An Amazon Bedrock knowledge base (managed or customer-managed) and an Amazon S3 data source that
   meet the [prerequisites in the main README](../README.md#prerequisites). In this app, the
@@ -55,6 +56,7 @@ cd deploy
 python -m venv .venv
 source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+export AWS_DEFAULT_REGION=REGION  # Windows PowerShell: $env:AWS_DEFAULT_REGION = "REGION"
 cdk bootstrap aws://ACCOUNT_ID/REGION
 
 cdk deploy \
@@ -69,6 +71,10 @@ cdk deploy \
 ```
 
 Replace `ACCOUNT_ID`, `REGION`, and the deployment example values before running the commands. Specifying the bootstrap environment explicitly avoids synthesizing the app while `cdk.json` still contains required placeholders.
+
+Set `AWS_DEFAULT_REGION` to the Region of your knowledge base before you run `cdk bootstrap` and `cdk deploy`. `cdk deploy` uses the Region from your environment or AWS profile, not the Region in the bootstrap command, and the stack's ARNs and pipeline configuration use that Region.
+
+When the deployment finishes, `cdk deploy` prints the `TailLogsCommand` and `RunTaskCommand` outputs. With a `rate(...)` schedule, such as the default, the first run starts when the deployment creates the EventBridge rule. To follow that run or start another one, see [Trigger a run on demand](#trigger-a-run-on-demand).
 
 The stack name is fixed as `Crawl4aiBedrockKbCrawler`, so another `cdk deploy` in the same account and Region updates that stack, even with different context values.
 
@@ -87,6 +93,8 @@ Keep the virtual environment active for every `cdk` command in the terminal. The
 | CDK cannot find `docker` when using Podman or Finch | Set `CDK_DOCKER=podman` or `CDK_DOCKER=finch`. |
 | `DEPRECATED: The legacy builder is deprecated` | Informational only. If the build still fails, check that the daemon is running. |
 | Missing required context key errors | Pass `knowledgeBaseId`, `dataSourceId`, `s3Bucket`, and `seedUrls` with `-c`, or set them in `cdk.json`. |
+| `cdk destroy` fails with `Context key 'knowledgeBaseId' still holds a placeholder` | Run `cdk destroy` with the same four required `-c` values that you used for `cdk deploy`, or set them in `cdk.json`. |
+| Task stays `PENDING` for several minutes, then stops with `ResourceInitializationError` or an ECR `GetAuthorizationToken` timeout | The task can't reach AWS services. Check VPC Block Public Access with `aws ec2 describe-vpc-block-public-access-options`. In ingress-only mode (`block-ingress`), redeploy with `-c egressMode=nat`. Bidirectional mode (`block-bidirectional`) also blocks NAT gateway traffic, so the VPC needs a VPC Block Public Access exclusion. For an imported VPC, also check its interface endpoint security groups. |
 
 ## Configuration
 
@@ -109,11 +117,13 @@ Keep the virtual environment active for every `cdk` command in the terminal. The
 | `crawlRequestDelaySeconds` | no | `1.0` | Nonnegative request pacing delay; seeds are also separated by this delay. |
 | `maxDepth` | no | `2` | Link levels followed from each seed; `0` processes only seeds. |
 | `maxPages` | no | `1000` | Global page-attempt cap across all seeds in one task run. |
-| `crawlScope` | no | `path` | `page`, `path`, or `host`; every mode stays on the seed origin, and path matching observes segment boundaries. |
+| `crawlScope` | no | `path` | `page`, `path`, or `host`; every mode stays on the seed origin, and path matching observes segment boundaries. With `path`, use a directory URL such as `https://www.example.com/services` as the seed; a page URL such as `.../services/permits.html` limits the crawl to that page. |
 | `includePatterns` | no | `[]` | JSON list of Crawl4AI URL globs or regexes allowed during discovery. |
 | `excludePatterns` | no | `[]` | JSON list of Crawl4AI URL globs or regexes rejected during discovery. |
 
 The stack strictly validates required identifiers, seed URLs, architecture, egress mode, endpoint combinations, and deep-crawl controls. Other AWS constraints, such as supported Fargate CPU/memory pairs and schedule syntax, are validated during CDK synthesis or deployment. `privateEndpoints=true` cannot be combined with `vpcId` because this stack never changes an imported VPC.
+
+The stack stores the pipeline configuration in a Standard-tier Parameter Store parameter, which holds up to 4 KB. That fits about 40 seed URLs of 80 to 90 characters. To cover more of a site, use fewer seeds with a broader `crawlScope` and `includePatterns`.
 
 ## Monitoring and production considerations
 
@@ -132,8 +142,10 @@ The stack strictly validates required identifiers, seed URLs, architecture, egre
   in [Prerequisites for container image access](https://docs.aws.amazon.com/guardduty/latest/ug/prereq-runtime-monitoring-ecs-support.html).
 - **Retries.** The pipeline uses the boto3 default retry behavior. Production workloads that see
   throttling can raise it, for example `Config(retries={"max_attempts": 5, "mode": "standard"})`.
-- **Cost.** Charges accrue for Fargate task time while a run is active, CloudWatch Logs storage, and
-  any NAT gateway or interface endpoints you enable. A short daily ARM64 task is inexpensive, but
+- **Cost.** Charges accrue for Fargate task time while a run is active, the task's public IPv4
+  address while it runs, CloudWatch Logs storage, the stack's AWS KMS key, and any NAT gateway or
+  interface endpoints you enable. NAT gateways and interface endpoints are billed hourly, even when
+  no task is running. A short daily ARM64 task is inexpensive, but
   confirm against [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/) for your Region and
   task size.
 
@@ -143,7 +155,7 @@ The task crawls public websites, so it needs real internet egress. Interface VPC
 
 Choose one topology:
 
-- **`egressMode=public` (default):** creates public subnets with an internet gateway and no NAT gateway. The task receives a public IP. Its security group has no inbound rules. This is the lowest-cost sample mode but requires the account to permit public task egress.
+- **`egressMode=public` (default):** creates public subnets with an internet gateway and no NAT gateway. The task receives a public IP. Its security group has no inbound rules. This is the lowest-cost sample mode but requires the account to permit public task egress. If VPC Block Public Access is turned on, see [Troubleshooting deployment](#troubleshooting-deployment).
 - **`egressMode=nat`:** creates public and private-with-egress subnets with one NAT gateway. The task uses private subnets without a public IP. One NAT gateway is a cost-conscious sample default, not a multi-AZ egress design; production workloads that require Availability Zone resilience should evaluate one NAT gateway per AZ or another resilient egress architecture.
 - **`egressMode=nat -c privateEndpoints=true`:** additionally creates an S3 gateway endpoint and interface endpoints for `ecr.api`, `ecr.dkr`, CloudWatch Logs, SSM, and `bedrock-agent`. One endpoint security group permits TCP 443 only from the crawler task security group. NAT remains necessary for public websites. Interface endpoints have hourly and data-processing charges.
 - **`vpcId=vpc-xxxx`:** imports a VPC without modifying routes, endpoints, flow logs, or security controls. The task prefers private-with-egress subnets and otherwise uses public subnets. You are responsible for internet egress and connectivity to ECR, CloudWatch Logs, SSM, Amazon S3, and the Agents for Amazon Bedrock build-time API. If the VPC has interface endpoints with private DNS for any of these services, the task's requests go to those endpoints, so their security groups must allow inbound TCP 443 from the crawler task security group. Endpoints that use the VPC's default security group don't allow this by default. Verify VPC flow logs and retention separately if your controls require them.
@@ -163,9 +175,13 @@ A newly created VPC counts against the regional VPC quota. If the account has re
 
 ## Trigger a run on demand
 
-The task runs on the configured schedule. To run it immediately, use the Amazon ECS console and select the generated cluster, task definition, subnets, and crawler security group. You can also copy the EventBridge target network configuration into `aws ecs run-task`.
+The task runs on the configured schedule. With a `rate(...)` schedule, the first run starts when the deployment creates the EventBridge rule. To follow a run, use the command in the stack's `TailLogsCommand` output, which `cdk deploy` prints when it finishes. To start a run outside the schedule, use the command in the `RunTaskCommand` output. Wait for any current run to finish first, because the stack doesn't prevent overlapping runs. To list the outputs later, run:
 
-Monitor both the `crawler` container exit code and its CloudWatch log stream. A successful task reports `job_status: COMPLETE`. `FAILED`, `STOPPED`, and `TIMED_OUT` return a nonzero container exit code. A `COMPLETE` job can still include documents that failed to ingest, so also check the logged job statistics and failure reasons.
+```bash
+aws cloudformation describe-stacks --stack-name Crawl4aiBedrockKbCrawler --region REGION --query "Stacks[0].Outputs"
+```
+
+Monitor both the `crawler` container exit code and its CloudWatch log stream. A successful task reports `job_status: COMPLETE`. `FAILED`, `STOPPED`, and `TIMED_OUT` return a nonzero container exit code. A `COMPLETE` job can still include documents that failed to ingest, so also check the logged job statistics and failure reasons. A run that prepares no pages, for example because `robots.txt` disallows them, exits with code 2 without starting an ingestion job.
 
 ## Repeated runs
 
@@ -175,7 +191,13 @@ The full pipeline uploads only files generated by the current task. It does not 
 
 ```bash
 cd deploy
-cdk destroy
+cdk destroy \
+  -c knowledgeBaseId=ABCDEFGHIJ \
+  -c dataSourceId=KLMNOPQRST \
+  -c s3Bucket=amzn-s3-demo-bucket \
+  -c 'seedUrls=["https://www.example.com/services"]'
 ```
 
-This removes stack-owned schedules, IAM roles, task definitions, the cluster, SSM parameter, log groups, security groups, and the VPC when the stack created it, and schedules the stack's AWS KMS key for deletion. An imported VPC is not modified or deleted. The command does not delete the knowledge base, source bucket, ingested objects, or container assets retained in the CDK bootstrap repository. It also leaves the Container Insights log group whose name starts with `/aws/ecs/containerinsights/Crawl4aiBedrockKbCrawler-`, which Container Insights creates outside the stack.
+Run `cdk destroy` in the same Region, with the same four required `-c` values that you used for `cdk deploy`. The app validates them on every command, so it stops while `cdk.json` holds only the placeholders.
+
+This removes stack-owned schedules, IAM roles, task definitions, the cluster, SSM parameter, log groups, security groups, and the VPC when the stack created it, and schedules the stack's AWS KMS key for deletion after a 30-day waiting period. An imported VPC is not modified or deleted. The command does not delete the knowledge base, source bucket, ingested objects, or the container image and template files that CDK stores in its bootstrap resources. It also leaves the Container Insights log group whose name starts with `/aws/ecs/containerinsights/Crawl4aiBedrockKbCrawler-`, which Container Insights creates outside the stack.
