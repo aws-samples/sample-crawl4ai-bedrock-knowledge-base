@@ -185,6 +185,11 @@ class DeepCrawlTests(unittest.IsolatedAsyncioTestCase):
                 with open(path, encoding="utf-8") as handle:
                     attributes = json.load(handle)["metadataAttributes"]
                     source_urls.append(attributes["source_url"]["value"]["stringValue"])
+                    # Whole seconds, so managed knowledge bases (integer-only number
+                    # filters) and customer-managed vector stores store the same value.
+                    self.assertIsInstance(
+                        attributes["crawled_at_epoch"]["value"]["numberValue"], int
+                    )
 
         self.assertEqual(
             source_urls,
@@ -245,6 +250,69 @@ class DeepCrawlTests(unittest.IsolatedAsyncioTestCase):
                 source_url = attributes["source_url"]["value"]["stringValue"]
 
         self.assertEqual(source_url, "https://example.com/docs/final")
+
+
+_NAVIGATION_PAGE = """<html><head><title>Permits overview</title></head><body>
+<header><a href="/docs/header-link">Header link</a></header>
+<nav><ul>
+<li><a href="/docs/getting-started">Getting started</a></li>
+<li><a href="/docs/configuration">Configuration</a></li>
+</ul></nav>
+<main>
+<h1>Permits overview</h1>
+<p>The city reviews residential building permit applications in the order that it
+receives them. Most reviews finish within ten business days. Before you apply, gather a
+site plan that shows property lines and setbacks, construction drawings for the proposed
+work, and proof that you own the property. You can track the status of your application
+online with the permit number that you receive after you submit it. For new decks, also
+read <a href="/docs/in-content">the deck guidance</a> before you start the application.</p>
+</main>
+<aside><a href="/docs/related">Related page</a></aside>
+<footer><a href="/docs/footer-link">Footer link</a></footer>
+</body></html>"""
+
+
+class LinkDiscoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_crawl_settings_follow_navigation_links_and_keep_markdown_clean(self):
+        crawler = _FakeCrawler([[_result("https://example.com/docs", "Permits overview")]])
+        config = PipelineConfig(
+            knowledge_base_id="kb",
+            data_source_id="ds",
+            s3_bucket="bucket",
+            region="us-east-1",
+            seed_urls=["https://example.com/docs"],
+            crawl=CrawlSettings(request_delay_seconds=0, max_depth=1, max_pages=1),
+        )
+        config.validate()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("crawl4ai_bedrock_kb.crawl.AsyncWebCrawler", return_value=crawler):
+                await crawl_and_prepare(config, temp_dir)
+        run_config = crawler.calls[0][1]
+
+        # Run Crawl4AI's own scraper and Markdown generator with the sample's settings,
+        # the same way AsyncWebCrawler does, on a page with links in every page region.
+        params = run_config.__dict__.copy()
+        params.pop("url", None)
+        scraped = run_config.scraping_strategy.scrap(
+            "https://example.com/docs", _NAVIGATION_PAGE, **params
+        )
+        discovered = {link.href for link in scraped.links.internal}
+        for path in (
+            "/docs/header-link",
+            "/docs/getting-started",
+            "/docs/configuration",
+            "/docs/in-content",
+            "/docs/related",
+            "/docs/footer-link",
+        ):
+            self.assertIn(f"https://example.com{path}", discovered)
+
+        markdown = run_config.markdown_generator.generate_markdown(
+            input_html=scraped.cleaned_html, base_url="https://example.com/docs"
+        )
+        self.assertIn("residential building permit applications", markdown.fit_markdown)
+        for boilerplate in ("Header link", "Getting started", "Related page", "Footer link"):
+            self.assertNotIn(boilerplate, markdown.fit_markdown)
 
 
 if __name__ == "__main__":

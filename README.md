@@ -105,7 +105,7 @@ the same steps 2 through 4 from your own machine, without EventBridge, Fargate, 
 - AWS credentials configured (for example via `aws configure`) with the permissions in
   [`iam/pipeline-policy.json`](iam/pipeline-policy.json).
 - Authorization to crawl the target websites, consistent with the
-  [Amazon Acceptable Use Policy](https://aws.amazon.com/aup/).
+  [AWS Acceptable Use Policy](https://aws.amazon.com/aup/).
 
 ## Quick Start
 
@@ -143,8 +143,9 @@ Add `--no-wait` to `ingest.py` or `run_pipeline.py` to start ingestion without p
 
 ## Running the tests
 
-The tests use the standard library `unittest` module, so no extra test dependencies are needed. Run
-them from the repository root:
+The tests use the standard library `unittest` module. The deployment tests also need the CDK
+libraries from `deploy/requirements.txt` and are skipped when those aren't installed. Run the tests
+from the repository root:
 
 ```bash
 python -m unittest discover -v
@@ -195,7 +196,7 @@ All values live in `config/pipeline.yaml`. Nothing customer-specific is hardcode
 | `metadata_attributes` | map | no | `{}` | Static string, finite number, boolean, or string-list metadata used for retrieval filtering. |
 | `crawl.max_depth` | int | no | `2` | Link levels followed from each seed; `0` processes only seeds. |
 | `crawl.max_pages` | int | no | `1000` | Global page-attempt cap across all seeds in one run. |
-| `crawl.scope` | string | no | `path` | `page`, `path`, or `host`; every mode stays on the seed origin, and path matching observes segment boundaries. |
+| `crawl.scope` | string | no | `path` | `page`, `path`, or `host`; every mode stays on the seed origin, and path matching observes segment boundaries. With `path`, use a directory URL such as `https://www.example.com/services` as the seed; a page URL such as `.../services/permits.html` limits the crawl to that page. |
 | `crawl.include_patterns` | list | no | `[]` | Optional Crawl4AI URL globs or regexes allowed during discovery. |
 | `crawl.exclude_patterns` | list | no | `[]` | Optional Crawl4AI URL globs or regexes rejected during discovery. |
 | `crawl.css_selector` | string/null | no | `null` | Optional CSS selector applied to every page, such as `main, article`. |
@@ -257,9 +258,10 @@ The local quick-start path creates no standalone AWS infrastructure. To remove i
 - Delete the objects it wrote under `s3://<s3_bucket>/<s3_prefix>` and re-sync the data source, or
 - Delete the knowledge base / data source if it was created only for this walkthrough.
 
-If you deployed the optional CDK stack, also run `cd deploy` followed by `cdk destroy`. This does
-not delete the knowledge base, source bucket, ingested objects, CDK bootstrap assets, or the
-cluster's Container Insights log group.
+If you deployed the optional CDK stack, also run `cdk destroy` from `deploy/` in the same Region,
+with the same four required `-c` values that you used for `cdk deploy` (see
+[`deploy/README.md`](deploy/README.md#clean-up)). This does not delete the knowledge base, source
+bucket, ingested objects, CDK bootstrap assets, or the cluster's Container Insights log group.
 
 ## Troubleshooting
 

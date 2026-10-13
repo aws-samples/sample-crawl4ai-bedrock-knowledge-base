@@ -1,6 +1,7 @@
 """Focused built-in unittest coverage for CDK context validation."""
 
 import contextlib
+import importlib.util
 import io
 import json
 import sys
@@ -12,8 +13,12 @@ _DEPLOY = Path(__file__).resolve().parents[1] / "deploy"
 if str(_DEPLOY) not in sys.path:
     sys.path.insert(0, str(_DEPLOY))
 
-import app as deploy_app  # noqa: E402
-from stacks.crawler_stack import CrawlerStack  # noqa: E402
+# The deployment tests need the CDK libraries from deploy/requirements.txt. Skip them
+# when those aren't installed, so the pipeline tests run with requirements.txt alone.
+_HAS_CDK = all(importlib.util.find_spec(name) for name in ("aws_cdk", "cdk_nag"))
+if _HAS_CDK:
+    import app as deploy_app  # noqa: E402
+    from stacks.crawler_stack import CrawlerStack  # noqa: E402
 
 
 class _Node:
@@ -29,6 +34,7 @@ class _App:
         self.node = _Node(context)
 
 
+@unittest.skipUnless(_HAS_CDK, "install deploy/requirements.txt to run the deployment tests")
 class DeployConfigTests(unittest.TestCase):
     def _context(self, **overrides):
         context = {
@@ -118,6 +124,23 @@ class DeployConfigTests(unittest.TestCase):
         self.assertEqual(crawl["scope"], "path")
         self.assertEqual(crawl["include_patterns"], ["*/departments/public-service/*"])
         self.assertEqual(crawl["exclude_patterns"], ["*/archive/*"])
+
+    def test_stack_outputs_commands_to_run_and_follow_a_task(self):
+        from aws_cdk import App
+        from aws_cdk.assertions import Template
+
+        config = deploy_app._load_config(_App(self._context()))
+        stack = CrawlerStack(App(), "OutputsTestStack", config=config)
+        outputs = Template.from_stack(stack).find_outputs("*")
+
+        run_task = json.dumps(outputs["RunTaskCommand"]["Value"])
+        self.assertIn("aws ecs run-task --region ", run_task)
+        self.assertIn("--launch-type FARGATE", run_task)
+        self.assertIn('--network-configuration \\"awsvpcConfiguration={subnets=[', run_task)
+        self.assertIn("assignPublicIp=ENABLED}", run_task)
+        tail_logs = json.dumps(outputs["TailLogsCommand"]["Value"])
+        self.assertIn("aws logs tail ", tail_logs)
+        self.assertIn(" --follow --region ", tail_logs)
 
 
 if __name__ == "__main__":
